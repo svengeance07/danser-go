@@ -11,3 +11,8 @@ func getOsuInstallation() string {
 	dir, _ := os.UserHomeDir()
 	return filepath.Join(dir, ".osu")
 }
+
+func getDefaultLazerPath() string {
+	dir, _ := os.UserHomeDir()
+	return filepath.Join(dir, ".local", "share", "osu")
+}

@@ -3,7 +3,6 @@ package common
 import (
 	"log"
 	"math"
-	"path/filepath"
 
 	"github.com/EdlinOrg/prominentcolor"
 	"github.com/go-gl/mathgl/mgl32"
@@ -80,7 +79,13 @@ func NewBackground(loadDefault bool) *Background {
 
 func (bg *Background) SetBeatmap(beatMap *beatmap.BeatMap, loadDefault, loadStoryboards bool) {
 	bgLoadFunc := func() {
-		image, err := texture.NewPixmapFileString(filepath.Join(settings.General.GetSongsDir(), beatMap.Dir, beatMap.Bg))
+		var image *texture.Pixmap
+		var err error
+		if bgPath, bgErr := beatMap.GetBgFile(); bgErr == nil {
+			image, err = texture.NewPixmapFileString(bgPath)
+		} else {
+			err = bgErr
+		}
 		if err != nil && loadDefault {
 			image, err = assets.GetPixmap("assets/textures/background-1.png")
 			if err != nil {

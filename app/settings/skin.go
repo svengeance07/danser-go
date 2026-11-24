@@ -36,26 +36,58 @@ type skin struct {
 }
 
 var skinPath string
+var skinLazerMode bool
+var skinLazerPath string
 var skinCache []string
 
+// LazerSkinLister returns custom skin names from osu!lazer when LazerMode is active.
+var LazerSkinLister func() []string
+
 func (d *defaultsFactory) SkinOptions() []string {
-	if General.GetSkinsDir() != skinPath {
-		skinPath = General.GetSkinsDir()
+	curSkinsDir := General.GetSkinsDir()
+	curLazerMode := General.LazerMode
+	curLazerPath := ""
+	if curLazerMode {
+		curLazerPath = General.GetLazerPath()
+	}
+
+	if curSkinsDir != skinPath || curLazerMode != skinLazerMode || curLazerPath != skinLazerPath || skinCache == nil {
+		skinPath = curSkinsDir
+		skinLazerMode = curLazerMode
+		skinLazerPath = curLazerPath
 
 		skinCache = []string{}
+		seen := map[string]bool{
+			"default": true,
+		}
 
 		fs, err := ioutil.ReadDir(skinPath)
 		if err == nil {
 			for _, f := range fs {
 				if f.IsDir() {
-					skinCache = append(skinCache, filepath.Base(f.Name()))
+					name := filepath.Base(f.Name())
+					lower := strings.ToLower(name)
+					if !seen[lower] {
+						seen[lower] = true
+						skinCache = append(skinCache, name)
+					}
 				}
 			}
-
-			sort.Slice(skinCache, func(i, j int) bool {
-				return strings.ToLower(skinCache[i]) < strings.ToLower(skinCache[j])
-			})
 		}
+
+		if curLazerMode && LazerSkinLister != nil {
+			for _, name := range LazerSkinLister() {
+				lower := strings.ToLower(name)
+				if name != "" && !seen[lower] {
+					seen[lower] = true
+					skinCache = append(skinCache, name)
+				}
+			}
+		}
+
+		sort.Slice(skinCache, func(i, j int) bool {
+			return strings.ToLower(skinCache[i]) < strings.ToLower(skinCache[j])
+		})
 
 		skinCache = append([]string{"default"}, skinCache...)
 	}

@@ -21,3 +21,8 @@ danser-core.*
 libdanser*
 api.txt
 *.osr
+lazer-bridge.exe
+lazer-bridge.pdb
+tools/lazer-bridge/bin/
+tools/lazer-bridge/obj/
+tools/lazer-bridge/FodyWeavers.xsd

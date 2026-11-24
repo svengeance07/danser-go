@@ -9,6 +9,21 @@ import (
 type FileMap struct {
 	path      string
 	pathCache map[string]string
+	virtual   bool
+}
+
+func NewVirtualFileMap(entries map[string]string) *FileMap {
+	fileMap := &FileMap{
+		pathCache: make(map[string]string, len(entries)),
+		virtual:   true,
+	}
+
+	for name, physicalPath := range entries {
+		norm := strings.TrimPrefix(strings.ReplaceAll(strings.ToLower(name), "\\", "/"), "/")
+		fileMap.pathCache[norm] = physicalPath
+	}
+
+	return fileMap
 }
 
 func NewFileMap(path string) (*FileMap, error) {
@@ -37,6 +52,15 @@ func NewFileMap(path string) (*FileMap, error) {
 }
 
 func (f *FileMap) GetFile(path string) (string, error) {
+	if f.virtual {
+		fPath := strings.TrimPrefix(strings.ReplaceAll(strings.ToLower(path), "\\", "/"), "/")
+		if resolved, ok := f.pathCache[fPath]; ok {
+			return resolved, nil
+		}
+
+		return "", os.ErrNotExist
+	}
+
 	sPath := strings.ToLower(f.path)
 	fPath := strings.TrimPrefix(strings.ReplaceAll(strings.ToLower(path), "\\", "/"), sPath)
 
@@ -48,10 +72,14 @@ func (f *FileMap) GetFile(path string) (string, error) {
 }
 
 func (f *FileMap) GetMap() map[string]string {
-	retMap := make(map[string]string)
+	retMap := make(map[string]string, len(f.pathCache))
 
 	for k, v := range f.pathCache {
-		retMap[k] = filepath.Join(f.path, v)
+		if f.virtual {
+			retMap[k] = v
+		} else {
+			retMap[k] = filepath.Join(f.path, v)
+		}
 	}
 
 	return retMap

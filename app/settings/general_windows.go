@@ -37,3 +37,7 @@ func getOsuInstallation() (path string) {
 
 	return
 }
+
+func getDefaultLazerPath() string {
+	return filepath.Join(os.Getenv("APPDATA"), "osu")
+}

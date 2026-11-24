@@ -537,6 +537,10 @@ func pushSRToDB(maps []*beatmap.BeatMap) {
 }
 
 func UpdatePlayStats(beatmap *beatmap.BeatMap) {
+	if dbFile == nil {
+		return
+	}
+
 	_, err := dbFile.Exec("UPDATE beatmaps SET playCount = ?, lastPlayed = ? WHERE dir = ? AND file = ?", beatmap.PlayCount, beatmap.LastPlayed, beatmap.Dir, beatmap.File)
 	if err != nil {
 		log.Println(err)
@@ -544,6 +548,10 @@ func UpdatePlayStats(beatmap *beatmap.BeatMap) {
 }
 
 func UpdateLocalOffset(beatmap *beatmap.BeatMap) {
+	if dbFile == nil {
+		return
+	}
+
 	_, err := dbFile.Exec("UPDATE beatmaps SET localOffset = ? WHERE dir = ? AND file = ?", beatmap.LocalOffset, beatmap.Dir, beatmap.File)
 	if err != nil {
 		log.Println(err)

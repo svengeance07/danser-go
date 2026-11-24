@@ -32,6 +32,7 @@ import (
 	"github.com/wieku/danser-go/app/database"
 	"github.com/wieku/danser-go/app/graphics"
 	"github.com/wieku/danser-go/app/graphics/gui/drawables"
+	"github.com/wieku/danser-go/app/lazer"
 	"github.com/wieku/danser-go/app/osuapi"
 	"github.com/wieku/danser-go/app/settings"
 	"github.com/wieku/danser-go/app/states/components/common"
@@ -300,6 +301,8 @@ func (l *launcher) startContext() {
 	}
 
 	settings.General.OsuSongsDir = c.General.OsuSongsDir
+	settings.General.LazerMode = c.General.LazerMode
+	settings.General.LazerPath = c.General.LazerPath
 
 	l.currentConfig = c
 
@@ -436,7 +439,11 @@ func (l *launcher) loadBeatmaps() {
 
 	err := database.Init()
 	if err != nil {
-		showMessage(mError, "Failed to initialize database! Error: %s\nMake sure Song's folder does exist or change it to the correct directory in settings.", err)
+		if settings.General.LazerMode {
+			log.Println("Database init skipped in LazerMode:", err)
+		} else {
+			showMessage(mError, "Failed to initialize database! Error: %s\nMake sure Song's folder does exist or change it to the correct directory in settings.", err)
+		}
 		l.beatmaps = make([]*beatmap.BeatMap, 0)
 	} else {
 		bSplash := "Loading maps...\nThis may take a while...\n\n"
@@ -497,35 +504,42 @@ func (l *launcher) loadLatestReplay() {
 	var list []*lastModPath
 
 	entries, err := os.ReadDir(replaysDir)
-	if err != nil {
-		return
-	}
-
-	for _, d := range entries {
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".osr") {
-			if info, err1 := d.Info(); err1 == nil {
-				list = append(list, &lastModPath{
-					tStamp: info.ModTime(),
-					name:   d.Name(),
-				})
+	if err == nil {
+		for _, d := range entries {
+			if !d.IsDir() && strings.HasSuffix(d.Name(), ".osr") {
+				if info, err1 := d.Info(); err1 == nil {
+					list = append(list, &lastModPath{
+						tStamp: info.ModTime(),
+						name:   d.Name(),
+					})
+				}
 			}
 		}
 	}
 
-	if list == nil {
-		return
+	if len(list) > 0 {
+		slices.SortFunc(list, func(a, b *lastModPath) int {
+			return -a.tStamp.Compare(b.tStamp)
+		})
+
+		// Load the newest that can be used
+		for _, lMP := range list {
+			r, err := l.loadReplay(filepath.Join(replaysDir, lMP.name))
+			if err == nil {
+				l.trySelectReplay(r)
+				return
+			}
+		}
 	}
 
-	slices.SortFunc(list, func(a, b *lastModPath) int {
-		return -a.tStamp.Compare(b.tStamp)
-	})
-
-	// Load the newest that can be used
-	for _, lMP := range list {
-		r, err := l.loadReplay(filepath.Join(replaysDir, lMP.name))
-		if err == nil {
-			l.trySelectReplay(r)
-			break
+	if l.currentConfig != nil && l.currentConfig.General.LazerMode {
+		if lazerReplays, err := lazer.ListReplays(20); err == nil {
+			for _, lr := range lazerReplays {
+				if r, loadErr := l.loadReplay(lr.ReplayPath); loadErr == nil {
+					l.trySelectReplay(r)
+					return
+				}
+			}
 		}
 	}
 }
@@ -899,12 +913,30 @@ func (l *launcher) selectReplay() {
 	if imgui.ButtonV("Select replay", bSize) {
 		dir := l.currentConfig.General.GetReplaysDir()
 		if _, err := os.Lstat(dir); err != nil {
-			dir = env.DataDir()
+			if l.currentConfig != nil && l.currentConfig.General.LazerMode {
+				exportsDir := filepath.Join(l.currentConfig.General.GetLazerPath(), "exports")
+				if _, expErr := os.Lstat(exportsDir); expErr == nil {
+					dir = exportsDir
+				} else {
+					dir = env.DataDir()
+				}
+			} else {
+				dir = env.DataDir()
+			}
 		}
 
 		p, err := dialog.File().Filter("osu! replay file (*.osr)", "osr").Title("Select replay file").SetStartDir(dir).Load()
 		if err == nil {
 			l.trySelectReplayFromPath(p)
+		}
+	}
+
+	if l.currentConfig != nil && l.currentConfig.General.LazerMode {
+		imgui.SameLine()
+		if imgui.ButtonV("Lazer replays", bSize) {
+			l.openPopup(newLazerReplayPopup(func(replayPath string) {
+				l.trySelectReplayFromPath(replayPath)
+			}))
 		}
 	}
 
@@ -982,6 +1014,17 @@ func (l *launcher) trySelectReplaysFromPaths(p []string) {
 			}
 		}
 
+		if !found && l.currentConfig != nil && l.currentConfig.General.LazerMode {
+			for _, replay := range replays {
+				if lazerMap, err := lazer.LoadBeatmapByMD5(replay.parsedReplay.BeatmapMD5); err == nil && lazerMap != nil {
+					launcherConfig.CurrentMode = Knockout
+					l.bld.setMap(lazerMap)
+					found = true
+					break
+				}
+			}
+		}
+
 		if !found {
 			showMessage(mError, "Replays use an unknown map. Please download the map beforehand.")
 		} else {
@@ -1009,6 +1052,17 @@ func (l *launcher) trySelectReplay(replay *knockoutReplay) {
 			launcherConfig.CurrentMode = Replay
 			l.bld.replayPath = replay.path
 			l.bld.setMap(bMap)
+			l.bld.setReplay(replay.parsedReplay)
+
+			return
+		}
+	}
+
+	if l.currentConfig != nil && l.currentConfig.General.LazerMode {
+		if lazerMap, err := lazer.LoadBeatmapByMD5(replay.parsedReplay.BeatmapMD5); err == nil && lazerMap != nil {
+			launcherConfig.CurrentMode = Replay
+			l.bld.replayPath = replay.path
+			l.bld.setMap(lazerMap)
 			l.bld.setReplay(replay.parsedReplay)
 
 			return
@@ -1073,7 +1127,7 @@ func (l *launcher) newKnockout() {
 }
 
 func (l *launcher) loadReplay(p string) (*knockoutReplay, error) {
-	if !strings.HasSuffix(p, ".osr") {
+	if !strings.HasSuffix(strings.ToLower(p), ".osr") && !(l.currentConfig != nil && l.currentConfig.General.LazerMode) {
 		return nil, fmt.Errorf("it's not a replay file")
 	}
 
@@ -1557,6 +1611,8 @@ func (l *launcher) openCurrentSettingsEditor() {
 	saveFunc := func() {
 		settings.SaveCredentials(false)
 		l.currentConfig.Save("", false)
+		settings.General.LazerMode = l.currentConfig.General.LazerMode
+		settings.General.LazerPath = l.currentConfig.General.LazerPath
 
 		if !compareDirs(l.currentConfig.General.OsuSongsDir, settings.General.OsuSongsDir) {
 			showMessage(mInfo, "This config has different osu! Songs directory.\nRestart the launcher to see updated maps")
@@ -1680,6 +1736,8 @@ func (l *launcher) setConfig(s string) {
 
 		l.bld.config = s
 		l.currentConfig = eConfig
+		settings.General.LazerMode = eConfig.General.LazerMode
+		settings.General.LazerPath = eConfig.General.LazerPath
 
 		*launcherConfig.Profile = l.bld.config
 		saveLauncherConfig()

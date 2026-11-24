@@ -151,7 +151,7 @@ var bufferPool = &sync.Pool{
 }
 
 func ParseBeatMap(beatMap *BeatMap) error {
-	file, err := os.Open(filepath.Join(settings.General.GetSongsDir(), beatMap.Dir, beatMap.File))
+	file, err := os.Open(beatMap.GetOsuFilePath())
 	if err != nil {
 		return err
 	}
@@ -256,12 +256,27 @@ func ParseBeatMapFile(file *os.File) *BeatMap {
 	return beatMap
 }
 
+func ParseBeatMapFromPath(osuPath string, fileMap *files.FileMap) (*BeatMap, error) {
+	beatMap := NewBeatMap()
+	beatMap.OsuFilePath = osuPath
+	beatMap.File = filepath.Base(osuPath)
+	if fileMap != nil {
+		beatMap.SetFileMap(fileMap)
+	}
+
+	if err := ParseBeatMap(beatMap); err != nil {
+		return nil, err
+	}
+
+	return beatMap, nil
+}
+
 func ParseTimingPointsAndPauses(beatMap *BeatMap) {
 	if beatMap.Timings.HasPoints() {
 		return
 	}
 
-	file, err := os.Open(filepath.Join(settings.General.GetSongsDir(), beatMap.Dir, beatMap.File))
+	file, err := os.Open(beatMap.GetOsuFilePath())
 	if err != nil {
 		panic(err)
 	}
@@ -302,7 +317,7 @@ func ParseTimingPointsAndPauses(beatMap *BeatMap) {
 }
 
 func ParseObjects(beatMap *BeatMap, diffCalcOnly, parseColors bool) {
-	file, err := os.Open(filepath.Join(settings.General.GetSongsDir(), beatMap.Dir, beatMap.File))
+	file, err := os.Open(beatMap.GetOsuFilePath())
 	if err != nil {
 		panic(err)
 	}

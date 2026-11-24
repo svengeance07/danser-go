@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,7 +13,6 @@ import (
 	"github.com/AllenDang/cimgui-go/imgui"
 
 	"github.com/wieku/danser-go/app/beatmap"
-	"github.com/wieku/danser-go/app/settings"
 	"github.com/wieku/danser-go/framework/bass"
 	"github.com/wieku/danser-go/framework/graphics/texture"
 	"github.com/wieku/danser-go/framework/math/animation"
@@ -458,7 +456,7 @@ func (m *songSelectPopup) showMapTooltip(bMap *beatmap.BeatMap) {
 
 	cPos := imgui.CursorPos()
 
-	thumbPath := filepath.Join(settings.General.GetSongsDir(), bMap.Dir, bMap.Bg)
+	thumbPath, _ := bMap.GetBgFile()
 
 	if m.lastThumbPath != thumbPath {
 		if m.thumbTex != nil {

@@ -75,7 +75,7 @@ func NewStoryboard(beatMap *beatmap.BeatMap) *Storyboard {
 	}
 
 	files := []string{
-		filepath.Join(settings.General.GetSongsDir(), beatMap.Dir, beatMap.File),
+		beatMap.GetOsuFilePath(),
 	}
 
 	if fPath, err := beatMap.GetRelatedFile(files2.FixName(fmt.Sprintf("%s - %s (%s).osb", beatMap.Artist, beatMap.Name, beatMap.Creator))); err == nil {

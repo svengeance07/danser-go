@@ -2,7 +2,10 @@ package settings
 
 import (
 	"github.com/wieku/danser-go/framework/env"
+	"log"
+	"os"
 	"path/filepath"
+	"strings"
 )
 
 var General = initGeneral()
@@ -14,6 +17,8 @@ func initGeneral() *general {
 		OsuSongsDir:       filepath.Join(osuBaseDir, "Songs"),
 		OsuSkinsDir:       filepath.Join(osuBaseDir, "Skins"),
 		OsuReplaysDir:     filepath.Join(osuBaseDir, "Replays"),
+		LazerMode:         false,
+		LazerPath:         "",
 		DiscordPresenceOn: true,
 		UnpackOszFiles:    true,
 		VerboseImportLogs: false,
@@ -29,6 +34,12 @@ type general struct {
 
 	// Directory that contains osu! replays
 	OsuReplaysDir string `long:"true" label:"osu! Replays directory" path:"Select osu! Replays directory" tooltip:"Don't use replays directory inside danser's directory!"`
+
+	// Whether danser should read beatmaps and replays directly from osu!lazer storage
+	LazerMode bool `label:"osu!lazer mode"`
+
+	// Directory that contains osu!lazer data (defaults to %AppData%\osu when empty)
+	LazerPath string `long:"true" label:"osu!lazer directory" path:"Select osu!lazer directory" tooltip:"Folder containing client.realm (leave empty for %AppData%\\osu)"`
 
 	// Whether discord should show that danser is on
 	DiscordPresenceOn bool `label:"Discord Rich Presence"`
@@ -84,4 +95,26 @@ func (g *general) GetReplaysDir() string {
 	}
 
 	return *g.replaysDir
+}
+
+func (g *general) GetLazerPath() string {
+	trimmed := strings.TrimSpace(g.LazerPath)
+	if trimmed == "" {
+		return getDefaultLazerPath()
+	}
+
+	resolved := trimmed
+	if !filepath.IsAbs(trimmed) {
+		resolved = filepath.Join(env.DataDir(), trimmed)
+	}
+
+	if _, err := os.Stat(filepath.Join(resolved, "client.realm")); os.IsNotExist(err) {
+		defaultDir := getDefaultLazerPath()
+		if _, defErr := os.Stat(filepath.Join(defaultDir, "client.realm")); defErr == nil {
+			log.Printf("SettingsManager: client.realm not found in LazerPath (%s), falling back to %s\n", resolved, defaultDir)
+			return defaultDir
+		}
+	}
+
+	return resolved
 }

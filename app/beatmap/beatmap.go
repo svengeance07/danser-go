@@ -3,6 +3,7 @@ package beatmap
 import (
 	"cmp"
 	"math"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -33,11 +34,12 @@ type BeatMap struct {
 
 	Diff *difficulty.Difficulty
 
-	Dir   string
-	File  string
-	Audio string
-	Bg    string
-	MD5   string
+	Dir         string
+	File        string
+	OsuFilePath string
+	Audio       string
+	Bg          string
+	MD5         string
 
 	SetID int64
 	ID    int64
@@ -217,9 +219,25 @@ func (beatMap *BeatMap) UpdatePlayStats() {
 	beatMap.LastPlayed = time.Now().UnixNano() / 1000000
 }
 
+func (beatMap *BeatMap) GetOsuFilePath() string {
+	if beatMap.OsuFilePath != "" {
+		return beatMap.OsuFilePath
+	}
+
+	return filepath.Join(settings.General.GetSongsDir(), beatMap.Dir, beatMap.File)
+}
+
+func (beatMap *BeatMap) SetFileMap(fileMap *files.FileMap) {
+	beatMap.pathCache = fileMap
+}
+
 func (beatMap *BeatMap) getPathCache() *files.FileMap {
 	if beatMap.pathCache == nil {
-		beatMap.pathCache, _ = files.NewFileMap(filepath.Join(settings.General.GetSongsDir(), beatMap.Dir))
+		if beatMap.OsuFilePath != "" {
+			beatMap.pathCache = files.NewVirtualFileMap(nil)
+		} else {
+			beatMap.pathCache, _ = files.NewFileMap(filepath.Join(settings.General.GetSongsDir(), beatMap.Dir))
+		}
 	}
 
 	return beatMap.pathCache
@@ -231,6 +249,18 @@ func (beatMap *BeatMap) GetRelatedFile(path string) (string, error) {
 
 func (beatMap *BeatMap) GetAudioFile() (string, error) {
 	return beatMap.GetRelatedFile(beatMap.Audio)
+}
+
+func (beatMap *BeatMap) GetBgFile() (string, error) {
+	if beatMap.Bg == "" {
+		return "", os.ErrNotExist
+	}
+
+	if beatMap.OsuFilePath != "" {
+		return beatMap.GetRelatedFile(beatMap.Bg)
+	}
+
+	return filepath.Join(settings.General.GetSongsDir(), beatMap.Dir, beatMap.Bg), nil
 }
 
 func (beatMap *BeatMap) CalculateStackLeniency(diff *difficulty.Difficulty) {

@@ -17,7 +17,6 @@ import (
 	"github.com/wieku/danser-go/framework/math/scaling"
 	"github.com/wieku/danser-go/framework/math/vector"
 	"log"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -74,7 +73,13 @@ func NewRankingPanel(cursor *graphics.Cursor, ruleset *osu.OsuRuleSet, hitError 
 	bg.SetColor(color.NewL(0.75))
 
 	bgLoadFunc := func() {
-		image, err := texture.NewPixmapFileString(filepath.Join(settings.General.GetSongsDir(), ruleset.GetBeatMap().Dir, ruleset.GetBeatMap().Bg))
+		var image *texture.Pixmap
+		var err error
+		if bgPath, bgErr := ruleset.GetBeatMap().GetBgFile(); bgErr == nil {
+			image, err = texture.NewPixmapFileString(bgPath)
+		} else {
+			err = bgErr
+		}
 		if err != nil {
 			image, err = assets.GetPixmap("assets/textures/background-1.png")
 			if err != nil {

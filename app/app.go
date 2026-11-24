@@ -26,6 +26,7 @@ import (
 	"github.com/wieku/danser-go/app/database"
 	"github.com/wieku/danser-go/app/discord"
 	"github.com/wieku/danser-go/app/ffmpeg"
+	"github.com/wieku/danser-go/app/lazer"
 	"github.com/wieku/danser-go/app/settings"
 	"github.com/wieku/danser-go/app/states"
 	"github.com/wieku/danser-go/app/utils"
@@ -302,52 +303,66 @@ func run() {
 
 		player = nil
 		var beatMap *beatmap.BeatMap = nil
+		loadedFromLazer := false
 
 		if !closeAfterSettingsLoad {
-			err := database.Init()
-			if err != nil {
-				log.Println("Failed to initialize database:", err)
-			} else {
-				beatmaps := database.LoadBeatmaps(*noDbCheck, nil)
+			if settings.General.LazerMode && *md5 != "" {
+				lazerMap, lazerErr := lazer.LoadBeatmapByMD5(*md5)
+				if lazerErr == nil && lazerMap != nil {
+					beatMap = lazerMap
+					loadedFromLazer = true
+					log.Println("Loaded beatmap from osu!lazer storage:", beatMap.Artist, "-", beatMap.Name, "["+beatMap.Difficulty+"]")
+				} else if lazerErr != nil {
+					log.Println("Lazer beatmap lookup failed, falling back to database:", lazerErr)
+				}
+			}
 
-				if *id > -1 {
-					for _, b := range beatmaps {
-						if b.ID == *id {
-							beatMap = b
-
-							break
-						}
-					}
-				} else if *md5 != "" {
-					for _, b := range beatmaps {
-						if strings.EqualFold(b.MD5, *md5) {
-							beatMap = b
-
-							break
-						}
-					}
+			if beatMap == nil {
+				err := database.Init()
+				if err != nil {
+					log.Println("Failed to initialize database:", err)
 				} else {
-					for _, b := range beatmaps {
-						if (*artist == "" || strings.EqualFold(*artist, b.Artist)) &&
-							(*title == "" || strings.EqualFold(*title, b.Name)) &&
-							(*difficulty == "" || strings.EqualFold(*difficulty, b.Difficulty)) &&
-							(*creator == "" || strings.EqualFold(*creator, b.Creator)) {
-							beatMap = b
+					beatmaps := database.LoadBeatmaps(*noDbCheck, nil)
 
-							break
-						}
-					}
-
-					if beatMap == nil {
-						log.Println("Beatmap with exact parameters not found, searching partially...")
+					if *id > -1 {
 						for _, b := range beatmaps {
-							if (*artist == "" || strings.Contains(strings.ToLower(b.Artist), strings.ToLower(*artist))) &&
-								(*title == "" || strings.Contains(strings.ToLower(b.Name), strings.ToLower(*title))) &&
-								(*difficulty == "" || strings.Contains(strings.ToLower(b.Difficulty), strings.ToLower(*difficulty))) &&
-								(*creator == "" || strings.Contains(strings.ToLower(b.Creator), strings.ToLower(*creator))) {
+							if b.ID == *id {
 								beatMap = b
 
 								break
+							}
+						}
+					} else if *md5 != "" {
+						for _, b := range beatmaps {
+							if strings.EqualFold(b.MD5, *md5) {
+								beatMap = b
+
+								break
+							}
+						}
+					} else {
+						for _, b := range beatmaps {
+							if (*artist == "" || strings.EqualFold(*artist, b.Artist)) &&
+								(*title == "" || strings.EqualFold(*title, b.Name)) &&
+								(*difficulty == "" || strings.EqualFold(*difficulty, b.Difficulty)) &&
+								(*creator == "" || strings.EqualFold(*creator, b.Creator)) {
+								beatMap = b
+
+								break
+							}
+						}
+
+						if beatMap == nil {
+							log.Println("Beatmap with exact parameters not found, searching partially...")
+							for _, b := range beatmaps {
+								if (*artist == "" || strings.Contains(strings.ToLower(b.Artist), strings.ToLower(*artist))) &&
+									(*title == "" || strings.Contains(strings.ToLower(b.Name), strings.ToLower(*title))) &&
+									(*difficulty == "" || strings.Contains(strings.ToLower(b.Difficulty), strings.ToLower(*difficulty))) &&
+									(*creator == "" || strings.Contains(strings.ToLower(b.Creator), strings.ToLower(*creator))) {
+									beatMap = b
+
+									break
+								}
 							}
 						}
 					}
@@ -359,7 +374,9 @@ func run() {
 				closeAfterSettingsLoad = true
 			} else {
 				beatMap.UpdatePlayStats()
-				database.UpdatePlayStats(beatMap)
+				if !loadedFromLazer {
+					database.UpdatePlayStats(beatMap)
+				}
 			}
 
 			database.Close()
